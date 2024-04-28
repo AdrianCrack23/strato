@@ -1,9 +1,12 @@
-# A workflow to verify the build on every push to the master branch
-name: Build
+name: GoddHoward
 
 on:
-  push: 
-    branches: [ master ]
+  workflow_dispatch
+
+# Only allow the latest build to run for a given PR, and cancel any previous builds
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -28,7 +31,6 @@ jobs:
             ${{ runner.os }}-gradle-${{ hashFiles('**/build.gradle') }}-${{ hashFiles('app/**/*.xml') }}-
             ${{ runner.os }}-gradle-${{ hashFiles('**/build.gradle') }}-
             ${{ runner.os }}-gradle-
-
       - name: Install Java 17
         uses: actions/setup-java@v4
         with:
@@ -39,10 +41,26 @@ jobs:
         run: |
           sudo apt-get install -y ninja-build
           ln -s /usr/bin/ninja .
-
       - name: Android Assemble
         env:
           CMAKE_C_COMPILER_LAUNCHER: "ccache"
           CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
           CCACHE_COMPILERCHECK: "string:${{ env.NDK_VERSION }}" # Use NDK version instead of compiler timestamp
-        run: ./gradlew --no-daemon --stacktrace --build-cache --parallel --configure-on-demand assembleMainlineRelease
+          PR_NUMBER: ${{ github.event.number }}
+        run: ./gradlew --no-daemon --stacktrace --build-cache --parallel --configure-on-demand assembleDevRelease assembleDevReldebug
+
+      - name: Rename APKs
+        run: |
+          mv app/build/outputs/apk/dev/release/app-dev-release.apk strato-pr${{ github.event.number }}-release.apk
+          mv app/build/outputs/apk/dev/reldebug/app-dev-reldebug.apk strato-pr${{ github.event.number }}-reldebug.apk
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: strato-pr${{ github.event.number }}-release.apk
+          path: strato-pr${{ github.event.number }}-release.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: strato-pr${{ github.event.number }}-reldebug.apk
+          path: strato-pr${{ github.event.number }}-reldebug.apk
